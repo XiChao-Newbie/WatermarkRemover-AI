@@ -1,4 +1,5 @@
 import sys
+import io
 import click
 from pathlib import Path
 import cv2
@@ -237,9 +238,10 @@ def process_video(input_path, output_path, florence_model, florence_processor, m
             if not ret:
                 break
             
-            # Convert frame to PIL Image
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_image = Image.fromarray(frame_rgb)
+            # Convert OpenCV frame to PIL Image - 100% compatible method for all versions
+            # Avoids all numpy strides/alignment/format compatibility issues
+            success, buffer = cv2.imencode('.png', frame)
+            pil_image = Image.open(io.BytesIO(buffer)).convert('RGB')
             
             # Get watermark mask
             mask_image = get_watermark_mask(pil_image, florence_model, florence_processor, device, max_bbox_percent, detection_prompt)
@@ -595,10 +597,33 @@ def main(input_path: str, output_path: str, preview: bool, overwrite: bool, tran
         # Apply float32 for CPU (compatibility)
         model_dtype = torch.float32 if device == "cpu" else None
 
-        florence_model = Florence2ForConditionalGeneration.from_pretrained(
-            "florence-community/Florence-2-large",
-            torch_dtype=model_dtype).to(device).eval()
-        florence_processor = AutoProcessor.from_pretrained("florence-community/Florence-2-large")
+        # 优先加载本地缓存模型
+        model_name = "florence-community/Florence-2-large"
+        
+        try:
+            # 首先尝试本地加载，不连接网络
+            florence_model = Florence2ForConditionalGeneration.from_pretrained(
+                model_name,
+                torch_dtype=model_dtype,
+                local_files_only=True
+            ).to(device).eval()
+            
+            florence_processor = AutoProcessor.from_pretrained(
+                model_name,
+                local_files_only=True
+            )
+            logger.info("Florence-2 Model loaded from local cache")
+            
+        except (OSError, ValueError):
+            # 本地不存在时才尝试下载
+            logger.info("Florence-2 Model not found locally, downloading now...")
+            florence_model = Florence2ForConditionalGeneration.from_pretrained(
+                model_name,
+                torch_dtype=model_dtype
+            ).to(device).eval()
+            
+            florence_processor = AutoProcessor.from_pretrained(model_name)
+            logger.info("Florence-2 Model downloaded and loaded")
 
         # Get sample image from input
         if input_path.is_dir():
@@ -673,11 +698,33 @@ def main(input_path: str, output_path: str, preview: bool, overwrite: bool, tran
     # Apply float32 for CPU (compatibility)
     model_dtype = torch.float32 if device == "cpu" else None
 
-    florence_model = Florence2ForConditionalGeneration.from_pretrained(
-        "florence-community/Florence-2-large",
-        torch_dtype=model_dtype).to(device).eval()
-    florence_processor = AutoProcessor.from_pretrained("florence-community/Florence-2-large")
-    logger.info("Florence-2 Model loaded")
+    # 优先加载本地缓存模型，避免网络连接
+    model_name = "florence-community/Florence-2-large"
+    
+    try:
+        # 首先尝试本地加载，不连接网络
+        florence_model = Florence2ForConditionalGeneration.from_pretrained(
+            model_name,
+            torch_dtype=model_dtype,
+            local_files_only=True
+        ).to(device).eval()
+        
+        florence_processor = AutoProcessor.from_pretrained(
+            model_name,
+            local_files_only=True
+        )
+        logger.info("Florence-2 Model loaded from local cache")
+        
+    except (OSError, ValueError):
+        # 本地不存在时才尝试下载
+        logger.info("Florence-2 Model not found locally, downloading now...")
+        florence_model = Florence2ForConditionalGeneration.from_pretrained(
+            model_name,
+            torch_dtype=model_dtype
+        ).to(device).eval()
+        
+        florence_processor = AutoProcessor.from_pretrained(model_name)
+        logger.info("Florence-2 Model downloaded and loaded")
 
     if not transparent:
         model_manager = load_lama_model(device)

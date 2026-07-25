@@ -10,8 +10,6 @@ numpy<2
 opencv-python-headless>=4.8.0,<4.12.0
 Pillow>=10.0.0
 
-# Inpainting core (iopaint installed separately with --no-deps to avoid resolver conflicts)
-
 # GUI (PyWebview for brainrot HTML UI)
 pywebview>=4.0
 
@@ -23,9 +21,4 @@ psutil
 pyyaml
 
 # Qt GUI backend (optional, for pywebview)
-# PyGObject is only needed on Linux/GTK systems
-# On Windows, pywebview uses WebView2 (built-in)
 qtpy
-
-# Note: For GTK GUI on Linux, install PyGObject separately:
-# pip install PyGObject
